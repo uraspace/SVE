@@ -1,10 +1,6 @@
 #pragma once
 
-// Módulo do MPU6050 (somente cabeçalho).
-// Detecta o início da queima (aceleração vertical acima do limiar) e o fim da
-// queima (aceleração vertical negativa), atualizando o estado de voo, sem
-// bloquear o programa.
-//
+
 // Uso no main: Wire.begin(); mpu6050_inicializar(); e, a cada ciclo,
 // mpu6050_atualizar() seguido dos mpu6050_obter_*().
 
@@ -12,14 +8,15 @@
 #include <Wire.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
+#include <math.h>
 
 #include "../estado_voo.h"
 
 /*
   TODO:
-   - [] Refazer o sistema de display de altitude
-   - [] Adicionar funções que faltam
    - [] Guardar os dados em SD
+   - [] Guardar o estado de voo no SD a cada mudança
+   - [] Ler o estado de voo do SD após ligar o SVE
 */
 
 // ---------------------------------------------------------------------------
@@ -36,7 +33,12 @@ struct Mpu6050Dados {
   Adafruit_MPU6050 sensor;
   bool             inicializado    = false;
   EstadoVoo        estado_atual    = EstadoVoo::RAMPA;
+  float            aceleracao_x    = 0.0f;
+  float            aceleracao_y    = 0.0f;
   float            aceleracao_z    = 0.0f;
+  float            rotacao_x       = 0.0f;
+  float            rotacao_y       = 0.0f;
+  float            rotacao_z       = 0.0f;
   float            temperatura_c   = 0.0f;
   unsigned long    inicio_subida   = 0;   // instante da decolagem (ms)
   unsigned long    tempo_subida_ms = 0;   // duração da queima (ms)
@@ -61,7 +63,10 @@ inline bool mpu6050_inicializar() {
     d.inicializado = false;
     return false;
   }
+// Definições do IMU
   d.sensor.setAccelerometerRange(MPU6050_RANGE_16_G);
+  d.sensor.setGyroRange(MPU6050_RANGE_1000_DEG);
+  d.sensor.setFilterBandwidth(MPU6050_BAND_44_HZ);
 
   d.estado_atual = EstadoVoo::RAMPA;
   d.inicializado = true;
@@ -80,8 +85,14 @@ inline bool mpu6050_atualizar() {
   if (!d.sensor.getEvent(&evento_acel, &evento_giro, &evento_temp)) {
     return false;
   }
+  d.aceleracao_x  = evento_acel.acceleration.x;
+  d.aceleracao_y  = evento_acel.acceleration.y;
   d.aceleracao_z  = evento_acel.acceleration.z;
+  d.rotacao_x     = evento_giro.gyro.x
+  d.rotacao_y     = evento_giro.gyro.y
+  d.rotacao_z     = evento_giro.gyro.z
   d.temperatura_c = evento_temp.temperature;
+
 
   switch (d.estado_atual) {
     case EstadoVoo::RAMPA:
@@ -93,14 +104,14 @@ inline bool mpu6050_atualizar() {
 
     case EstadoVoo::QUEIMA:
       // Detectar fim da queima (não detecta o apogeu, deve ser detectado com o barômetro)
-      if (d.aceleracao_z < 0) {
-        d.tempo_subida_ms = millis() - d.inicio_subida;
-        d.estado_atual    = EstadoVoo::COASTING;
-      }
+ /*     if (d.aceleracao_z < 0) {
+       d.tempo_subida_ms = millis() - d.inicio_subida;
+      d.estado_atual    = EstadoVoo::COASTING;
+      }*/
       break;
 
     default:
-      break;  // demais estados não são tratados por este módulo
+      break;  
   }
   return true;
 }
@@ -110,10 +121,44 @@ inline EstadoVoo mpu6050_obter_estado() {
   return mpu6050_dados().estado_atual;
 }
 
-// Última aceleração vertical (eixo z) lida. Unidade: m/s2.
+// Obtem as acelerações em x, y, z
+inline float mpu6050_obter_aceleracao_x() {
+  return mpu6050_dados().aceleracao_x;
+}
+inline float mpu6050_obter_aceleracao_y() {
+  return mpu6050_dados().aceleracao_y;
+}
 inline float mpu6050_obter_aceleracao_z() {
   return mpu6050_dados().aceleracao_z;
 }
+
+// Obtem as rotacoes em x, y, z (rad/s)
+inline float mpu6050_obter_rotacao_x(){
+  return mpu6050_dados().rotacao_x;
+}
+inline float mpu6050_obter_rotacao_y(){
+  return mpu6050_dados().rotacao_y;
+}
+inline float mpu6050_obter_rotacao_z(){
+  return mpu6050_dados().rotacao_z;
+}
+
+inline float mpu6050_obter_pitch(){
+  ax = mpu6050_obter_aceleracao_x();
+  ay = mpu6050_obter_aceleracao_y();
+  az = mpu6050_obter_aceleracao_z();
+  float pitch = atan2(ax, sqrt(ay * ay + az * az)) * 180.0 / PI;
+  return pitch;
+}
+
+inline float mpu6050_obter_roll(){
+  ax = mpu6050_obter_aceleracao_x();
+  ay = mpu6050_obter_aceleracao_y();
+  az = mpu6050_obter_aceleracao_z();
+  float roll  = atan2(ay, sqrt(ax * ax + az * az)) * 180.0 / PI;
+  return roll;
+}
+
 
 // Última temperatura lida (do próprio chip). Unidade: graus Celsius.
 inline float mpu6050_obter_temperatura() {
