@@ -18,6 +18,7 @@
    - [] Guardar o estado de voo no SD a cada mudança
    - [] Ler o estado de voo do SD após ligar o SVE
    - [] Determinar o angulo para soltar o paraquedas e implementar
+   - [] teste
 */
 
 // ---------------------------------------------------------------------------
